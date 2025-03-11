@@ -3,11 +3,11 @@ import pickle
 import numpy as np
 from sentence_transformers import SentenceTransformer
 import faiss
-from config import EMBEDDING_MODEL, VECTOR_STORE_DIR, TOP_K_RETRIEVAL, MODEL_DIR
+from config import EMBEDDING_MODEL, VECTOR_STORE_DIR, TOP_K_RETRIEVAL, MODEL_DIR, IN_PACKAGED_ENV
 
 class VectorStore:
     def __init__(self):
-    # 设置环境变量，指定模型加载位置
+        # 设置环境变量，指定模型加载位置
         os.environ['TRANSFORMERS_CACHE'] = MODEL_DIR
         os.environ['HF_HOME'] = MODEL_DIR
         os.environ['SENTENCE_TRANSFORMERS_HOME'] = MODEL_DIR
@@ -29,15 +29,29 @@ class VectorStore:
     
     def _load_or_create_index(self):
         """加载或创建FAISS索引"""
-        if os.path.exists(self.index_file) and os.path.exists(self.texts_file):
-            self.index = faiss.read_index(self.index_file)
-            with open(self.texts_file, 'rb') as f:
-                self.texts = pickle.load(f)
-        else:
-            # 创建一个空的索引，使用内积计算相似度（适用于余弦相似度）
+        try:
+            if os.path.exists(self.index_file) and os.path.exists(self.texts_file):
+                self.index = faiss.read_index(self.index_file)
+                with open(self.texts_file, 'rb') as f:
+                    self.texts = pickle.load(f)
+            else:
+                # 创建一个空的索引，使用内积计算相似度（适用于余弦相似度）
+                dimension = self.embedding_model.get_sentence_embedding_dimension()
+                self.index = faiss.IndexFlatIP(dimension)  # 使用内积而不是L2距离
+                self.texts = []
+                
+                # 如果是打包环境，立即保存空索引，确保文件存在
+                if IN_PACKAGED_ENV:
+                    self._save_index()  # 修正：使用_save_index而不是save
+        except Exception as e:
+            print(f"加载索引时出错: {e}")
+            # 创建一个空的索引
             dimension = self.embedding_model.get_sentence_embedding_dimension()
-            self.index = faiss.IndexFlatIP(dimension)  # 使用内积而不是L2距离
+            self.index = faiss.IndexFlatIP(dimension)
             self.texts = []
+            
+            # 保存空索引
+            self._save_index()  # 修正：使用_save_index而不是save
     
     def add_texts(self, texts, source_name):
         """添加文本到向量存储"""
@@ -105,9 +119,35 @@ class VectorStore:
     
     def _save_index(self):
         """保存索引和文本到磁盘"""
-        faiss.write_index(self.index, self.index_file)
-        with open(self.texts_file, 'wb') as f:
-            pickle.dump(self.texts, f)
+        try:
+            # 确保目录存在
+            os.makedirs(os.path.dirname(self.index_file), exist_ok=True)
+            
+            # 打印调试信息
+            print(f"正在保存索引到: {self.index_file}")
+            print(f"正在保存文本到: {self.texts_file}")
+            
+            # 保存索引
+            faiss.write_index(self.index, self.index_file)
+            
+            # 保存文本
+            with open(self.texts_file, 'wb') as f:
+                pickle.dump(self.texts, f)
+            
+            # 验证文件是否已创建
+            if os.path.exists(self.index_file) and os.path.exists(self.texts_file):
+                print(f"索引和文本文件已成功保存")
+                print(f"索引文件大小: {os.path.getsize(self.index_file)} 字节")
+                print(f"文本文件大小: {os.path.getsize(self.texts_file)} 字节")
+            else:
+                print(f"警告: 文件保存后无法验证其存在")
+                
+            return True
+        except Exception as e:
+            print(f"保存索引时出错: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
     
     def clear(self):
         """清空向量存储"""

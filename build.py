@@ -43,11 +43,33 @@ def build_executable():
     vector_dir = os.path.join(current_dir, "vector_store")
     os.makedirs(vector_dir, exist_ok=True)
     
+    # 创建一个运行时配置文件，用于存储路径信息
+    runtime_config = os.path.join(current_dir, "runtime_config.py")
+    with open(runtime_config, "w", encoding="utf-8") as f:
+        f.write("""
+# 此文件由打包脚本自动生成，用于在运行时确定资源路径
+import os
+import sys
+
+def get_resource_path(relative_path):
+    \"\"\"获取资源的绝对路径，适用于开发环境和打包后的环境\"\"\"
+    # 判断是否在打包环境中运行
+    if getattr(sys, 'frozen', False):
+        # 如果是打包后的应用程序，则使用sys._MEIPASS
+        base_path = sys._MEIPASS
+    else:
+        # 如果是开发环境，则使用当前脚本所在目录
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    
+    return os.path.join(base_path, relative_path)
+""")
+    
     # 定义需要包含的数据文件
     datas = [
         (model_dir, "models"),
         (kb_dir, "knowledge_base"),
         (vector_dir, "vector_store"),
+        (runtime_config, "."),  # 添加运行时配置文件
     ]
     
     # 将数据文件转换为 PyInstaller 格式
@@ -64,6 +86,7 @@ def build_executable():
         "--icon=assets/icon.ico" if os.path.exists(os.path.join(current_dir, "assets/icon.ico")) else "",  # 图标
         "--clean",  # 清理临时文件
         "--noconfirm",  # 不询问确认
+        "--hidden-import=runtime_config",  # 确保导入运行时配置
     ] + datas_str
     
     # 过滤掉空参数
