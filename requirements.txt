@@ -1,0 +1,10 @@
+openai>=1.0.0
+sentence-transformers
+faiss-cpu
+langchain
+langchain-community
+pypdf
+docx2txt
+customtkinter  # 美观的tkinter界面库
+python-dotenv
+pyinstaller
