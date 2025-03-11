@@ -24,7 +24,7 @@ class AppUI(ctk.CTk):
         self.vector_store = VectorStore()
         
         # 设置窗口
-        self.title("通义千问Plus RAG助手")
+        self.title("乐乐的RAG学习助手 - 马斯陶专属定制")
         self.geometry("1000x700")  # 调整窗口大小
         
         # 定义消息样式
@@ -43,6 +43,9 @@ class AppUI(ctk.CTk):
         
         # 检查API Key配置
         self.check_api_key()
+        
+        # 显示欢迎消息
+        self.after(500, lambda: self.add_message("系统", "欢迎进入伟大的马斯陶先生给乐乐写的 rag 项目！"))
     
     def create_widgets(self):
         # 创建两个主要框架
@@ -74,7 +77,7 @@ class AppUI(ctk.CTk):
         self.update_documents_list(show_message=False)  # 初始化时不显示消息
         
         # 右侧聊天区域
-        chat_label = ctk.CTkLabel(right_frame, text="与通义千问Plus对话", font=("Arial", 16, "bold"))
+        chat_label = ctk.CTkLabel(right_frame, text="与大模型“lele1.0”对话", font=("Arial", 16, "bold"))
         chat_label.pack(pady=(10, 20))
         
         # 聊天历史区域
@@ -170,33 +173,6 @@ class AppUI(ctk.CTk):
         # 在后台处理请求
         threading.Thread(target=self._process_query, args=(query,)).start()
     
-    def _process_query(self, query):
-        """在后台处理查询"""
-        try:
-            # 调用RAG引擎处理查询
-            result = self.rag_engine.query(query)
-            
-            if result["has_context"]:
-                # 显示检索到的上下文信息
-                self.after(0, lambda: self.add_message("系统", "📚 检索到以下相关内容:"))
-                
-                # 显示每个检索到的上下文
-                for i, context in enumerate(result["contexts"]):
-                    # 限制长度以避免显示过多
-                    preview = context[:200] + "..." if len(context) > 200 else context
-                    self.after(0, lambda: self.add_message("知识库", f"[片段 {i+1}] {preview}"))
-            else:
-                self.after(0, lambda: self.add_message("系统", "⚠️ 未检索到相关知识，将使用模型的通用知识回答"))
-            
-            # 显示最终回答
-            response = result["response"]
-            if response["success"]:
-                self.after(0, lambda: self.add_message("助手", response["content"]))
-            else:
-                self.after(0, lambda: self.add_message("系统", f"查询失败: {response['error']}"))
-        except Exception as e:
-            self.after(0, lambda: self.add_message("系统", f"处理查询时出错: {str(e)}"))
-
     def add_document(self):
         """添加文档到知识库"""
         file_path = filedialog.askopenfilename(
@@ -282,7 +258,7 @@ class AppUI(ctk.CTk):
             else:
                 print(f"更新文档列表时出错: {str(e)}")
 
-    def add_message(self, sender, message):
+    def add_message(self, sender, message, message_id=None):
         """向聊天历史添加消息"""
         # 获取发送者的样式
         style = self.message_styles.get(sender, {"bg": "#F5F5F5", "fg": "#333333", "prefix": ""})
@@ -292,20 +268,100 @@ class AppUI(ctk.CTk):
         
         # 添加时间戳
         timestamp = datetime.now().strftime("%H:%M:%S")
-        self.chat_history.insert(tk.END, f"[{timestamp}] ", "timestamp")
+        
+        # 如果提供了消息ID，将其存储为标签
+        tag_prefix = message_id if message_id else f"{sender}_{timestamp}"
+        
+        self.chat_history.insert(tk.END, f"[{timestamp}] ", f"timestamp_{tag_prefix}")
         
         # 添加发送者和消息
         sender_text = f"{style['prefix']}{sender}: "
-        self.chat_history.insert(tk.END, sender_text, f"sender_{sender}")
-        self.chat_history.insert(tk.END, f"{message}\n\n", f"message_{sender}")
+        self.chat_history.insert(tk.END, sender_text, f"sender_{tag_prefix}")
+        self.chat_history.insert(tk.END, f"{message}\n\n", f"message_{tag_prefix}")
         
         # 应用样式标签
-        self.chat_history.tag_config("timestamp", foreground="#999999")
-        self.chat_history.tag_config(f"sender_{sender}", foreground=style["fg"], font=("Arial", 11, "bold"))
-        self.chat_history.tag_config(f"message_{sender}", foreground=style["fg"])
+        self.chat_history.tag_config(f"timestamp_{tag_prefix}", foreground="#999999")
+        self.chat_history.tag_config(f"sender_{tag_prefix}", foreground=style["fg"], font=("Arial", 11, "bold"))
+        self.chat_history.tag_config(f"message_{tag_prefix}", foreground=style["fg"])
         
         # 滚动到底部
         self.chat_history.see(tk.END)
         
         # 禁用编辑
         self.chat_history.config(state=tk.DISABLED)
+        
+        return tag_prefix
+
+    def update_message(self, message_id, content_delta=None, is_done=False):
+        """更新现有消息的内容"""
+        if not message_id:
+            return
+            
+        # 启用编辑
+        self.chat_history.config(state=tk.NORMAL)
+        
+        # 获取消息标签的位置
+        try:
+            tag_ranges = self.chat_history.tag_ranges(f"message_{message_id}")
+            if not tag_ranges:
+                # 如果标签不存在，可能是第一次更新，先添加消息
+                if content_delta:
+                    self.add_message("助手", content_delta, message_id=message_id)
+                return
+                
+            start_index = tag_ranges[0]
+            end_index = tag_ranges[1]
+            
+            if content_delta:
+                # 在消息末尾添加新内容（在换行符之前）
+                insert_pos = f"{end_index} - 2 chars"
+                self.chat_history.insert(insert_pos, content_delta)
+                
+            if is_done:
+                # 流式输出完成，可以在这里添加任何完成标记
+                pass
+                
+            # 滚动到底部
+            self.chat_history.see(tk.END)
+        except (IndexError, TclError) as e:
+            print(f"更新消息时出错: {e}")
+        
+        # 禁用编辑
+        self.chat_history.config(state=tk.DISABLED)
+
+    def _process_query(self, query):
+        """在后台处理查询"""
+        try:
+            # 调用RAG引擎处理查询
+            # 首先显示正在思考的消息
+            self.after(0, lambda: self.add_message("系统", "🤔 正在思考中..."))
+            
+            # 创建一个消息ID用于后续更新
+            response_id = f"response_{datetime.now().strftime('%H%M%S')}"
+            
+            # 流式输出的回调函数
+            def stream_callback(content_delta, is_done):
+                if is_done:
+                    # 流式输出完成
+                    self.after(0, lambda: self.update_message(response_id, is_done=True))
+                else:
+                    # 更新消息
+                    self.after(0, lambda: self.update_message(response_id, content_delta))
+            
+            # 调用流式查询
+            result = self.rag_engine.stream_query(query, stream_callback)
+            
+            if result["has_context"]:
+                # 显示检索到的上下文信息
+                self.after(0, lambda: self.add_message("系统", "📚 检索到以下相关内容:"))
+                
+                # 显示每个检索到的上下文
+                for i, context in enumerate(result["contexts"]):
+                    # 限制长度以避免显示过多
+                    preview = context[:200] + "..." if len(context) > 200 else context
+                    self.after(0, lambda: self.add_message("知识库", f"[片段 {i+1}] {preview}"))
+            else:
+                self.after(0, lambda: self.add_message("系统", "⚠️ 未检索到相关知识，将使用模型的通用知识回答"))
+            
+        except Exception as e:
+            self.after(0, lambda: self.add_message("系统", f"处理查询时出错: {str(e)}"))

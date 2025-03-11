@@ -1,5 +1,8 @@
 openai>=1.0.0
-sentence-transformers
+sentence-transformers>=2.2.2
+customtkinter>=5.2.0
+python-dotenv>=1.0.0
+PyPDF2>=3.0.0
 faiss-cpu
 langchain
 langchain-community
